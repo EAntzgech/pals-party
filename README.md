@@ -24,3 +24,5 @@ Render runs one Free Node instance. Auto-deploy is off: publish updates manually
 ## Visual theme
 
 Ancient royal court styling: imperial obsidian #120D1C, antique crimson #2B141D, parchment #FFF8E7 and gold #FFB800. Phone screens put the central game card first with stacked game choices below; all game rules, timing, scoring and connection logic are unchanged.
+
+The lobby places game selection, player selection and Start together before the board. During play the board takes priority and setup collapses. A short hint stays beside each board; full instructions expand under How to play. On phones Create/Join appears before the welcome copy.
