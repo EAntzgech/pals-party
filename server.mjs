@@ -63,7 +63,7 @@ if(req.url==='/events'){
  res.on('close',()=>{clearInterval(keepAlive);disconnect(r,p,res);});return;
 }
 if(p.flips.length===2&&Date.now()>=p.lock)p.flips=[];
-if(b.action==='chat'){const message=String(b.message||'').trim();if(!message||message.length>240)fail('Use 1–240 characters.');if(Date.now()-(p.lastChat||0)<700)fail('Please wait a moment.');p.lastChat=Date.now();r.chat.push({name:p.name,text:message});r.chat=r.chat.slice(-80);}
+if(b.action==='chat'){const message=String(b.message||'').trim();if(!message||message.length>240)fail('Use 1–240 characters.');if(Date.now()-(p.lastChat||0)<700)fail('Please wait a moment.');p.lastChat=Date.now();r.chat.push({id:token(),name:p.name,text:message});r.chat=r.chat.slice(-80);}
 else if(b.action==='memoryMode'){if(r.host!==p.id)fail('Only the host can choose a mode.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['turn','race'].includes(b.mode))fail('Unknown mode.');r.memoryMode=b.mode;r.phase='lobby';r.shared=[];}
 else if(b.action==='select'){
  if(r.host!==p.id)fail('Only the host can choose a game.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['memory','race','ttt','gebeta'].includes(b.game))fail('Unknown game.');r.game=b.game;r.phase='lobby';r.result='';r.duel=null;

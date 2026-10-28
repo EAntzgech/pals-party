@@ -1,3 +1,4 @@
+import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,8 +25,8 @@ test('HTTP + private push streams across all four games',async()=>{
  async function stream(session){const abort=new AbortController(),events=[];streams.push(abort);const response=await fetch(base+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(session),signal:abort.signal});assert.equal(response.status,200);const reader=response.body.getReader();let buffer='';(async()=>{try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=new TextDecoder().decode(value);let i;while((i=buffer.indexOf('\n\n'))>=0){const event=buffer.slice(0,i);buffer=buffer.slice(i+2);if(event.startsWith('data: '))events.push(JSON.parse(event.slice(6)));}}}catch{}})();return {abort,events};}
  async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await sleep(10);}assert.fail('Expected push update did not arrive');}
  try{
- const a=await request('create',{}, {name:'A'}),sa={code:a.code,secret:a.secret};const pa=await stream(sa);
- const b=await request('join',{}, {name:'B',code:a.code}),sb={code:b.code,secret:b.secret};const pb=await stream(sb);
+ const a=await request('create',{}, {name:'A'}),sa={code:a.code,secret:a.secret};let pa=await stream(sa);
+ const b=await request('join',{}, {name:'B',code:a.code}),sb={code:b.code,secret:b.secret};let pb=await stream(sb);
  await until(()=>pa.events.at(-1)?.players.length===2);
  assert.equal((await request('join',{}, {name:'a',code:a.code})).status,400);
  assert.equal((await request('state',{code:a.code,secret:'bad'})).status,401);
@@ -45,11 +46,11 @@ test('HTTP + private push streams across all four games',async()=>{
   assert.equal(turnState.memoryTurn.player,actor,'Matching pair keeps the turn');
  }
  if(mismatch){
-  const actor=turnState.memoryTurn.player,connection=actor===a.me?pa:pb;connection.abort.abort();await until(()=>((actor===a.me?pb:pa).events.at(-1)?.memoryTurn?.paused));await stream(turnSessions[actor]);
+  const actor=turnState.memoryTurn.player,connection=actor===a.me?pa:pb;connection.abort.abort();await until(()=>((actor===a.me?pb:pa).events.at(-1)?.memoryTurn?.paused));if(actor===a.me)pa=await stream(sa);else pb=await stream(sb);
   // Leaving during a turn ends a two-player match cleanly.
  }
  await request('leave',sb);turnState=await request('state',sa);assert.equal(turnState.phase,'ended');
- const replacement=await request('join',{}, {name:'B',code:a.code});sb.secret=replacement.secret;b.me=replacement.me;await stream(sb);
+ const replacement=await request('join',{}, {name:'B',code:a.code});sb.secret=replacement.secret;b.me=replacement.me;pb=await stream(sb);
  await request('memoryMode',sa,{mode:'race'});await request('start',sa);now+=3001;
  let s=await request('flip',sa,{index:0});assert.equal(s.flips.length,1);await until(()=>pb.events.at(-1)?.phase==='playing');assert.equal(pb.events.at(-1).flips.length,0);
  // Learn a matching pair using legal moves and time advancement.
@@ -95,3 +96,16 @@ test('HTTP + private push streams across all four games',async()=>{
  }finally{Date.now=realNow;for(const s of streams)s.abort();server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
 
+
+test('floating chat unread counts ignore history and own messages and clear on open',()=>{
+ const html=fs.readFileSync(new URL('./index.html',import.meta.url),'utf8'),source=html.slice(html.indexOf('let chatRoom=null'),html.indexOf("$('chatToggle').onclick="));
+ const nodes={chatToggle:{setAttribute(k,v){this[k]=v}},chatPanel:{open:false},chatBadge:{},chatAnnouncement:{textContent:''}};
+ const context=vm.createContext({$:id=>nodes[id]});vm.runInContext(source,context);
+ const base={code:'ROOM',me:'a',players:[{id:'a',name:'Alex'}]},history={id:'1',name:'Blair',text:'Hello'};
+ context.updateChatBadge({...base,chat:[history]});assert.equal(nodes.chatBadge.hidden,true);
+ context.updateChatBadge({...base,chat:[history,{...history,id:'2'}]});assert.equal(nodes.chatBadge.textContent,'1');
+ context.updateChatBadge({...base,chat:[history,{...history,id:'2'},{...history,id:'3'}]});assert.equal(nodes.chatBadge.textContent,'2');
+ context.updateChatBadge({...base,chat:[history,{...history,id:'2'},{...history,id:'3'},{id:'4',name:'Alex',text:'Mine'}]});assert.equal(nodes.chatBadge.textContent,'2');
+ nodes.chatPanel.open=true;context.updateChatBadge({...base,chat:[history]});assert.equal(nodes.chatBadge.hidden,true);
+ nodes.chatPanel.open=false;context.updateChatBadge({...base,code:'OTHER',chat:[history]});assert.equal(nodes.chatBadge.hidden,true);
+});
