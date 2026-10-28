@@ -39,7 +39,7 @@ The included render.yaml declares the same settings for users who prefer Render 
 
 ## Operational notes
 
-This version uses HTTP polling every 300 ms, not WebSockets. Render supports both, so no transport rewrite is required to publish it. Polling and chat increase outbound bandwidth; monitor usage after your first few sessions.
+This version uses authenticated server-sent events for room state and HTTP requests for player actions. State is pushed on changes; there is no state polling timer. A transport keep-alive comment is sent every 20 seconds, without any game state. Monitor bandwidth usage after your first few sessions.
 
 Rooms and chat live in process memory, and are lost on sleep, redeployment, crash or restart. Keep a single instance. Deploy updates only between matches. Do not use artificial keep-alive traffic to present the free plan as always running.
 
