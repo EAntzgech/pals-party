@@ -43,3 +43,9 @@ The light royal theme uses obsidian, warm crimson, parchment and gold, with rest
 ## Hosting limitation
 
 Render runs one Free Node instance, with auto-deploy disabled. Publish updates between matches. Rooms, messages, scores and series progress live in memory and are lost on server restart, sleep or redeployment. Free services sleep after 15 idle minutes and may take about a minute to wake. See DEPLOY-RENDER.md for setup and limits.
+
+## Stop or extend a match
+
+The host can use End game during play or an unfinished series. Confirmation returns everyone to the lobby, clears the cancelled match/series without a winner, announces the cancellation and preserves the room and chat. Animation and race deadlines from that match cannot affect the lobby. Other players retain Leave room.
+
+After a normal Single round win in Tic-Tac-Toe or Gebeta, only the loser can ask for Best of 3 from Results. Only the winner can accept or decline. Acceptance credits the first win (1–0), locks the existing competitors and lets the host start the next round with the alternating starter. Declining preserves the original result. One request is permitted per round; a pending request closes if a competitor leaves.

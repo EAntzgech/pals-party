@@ -166,3 +166,33 @@ test('best-of-three lifecycle with spectator, draws, refresh, rematch and forfei
  cs.abort();await sleep(30150);state=await req('state',sa);assert.equal(state.outcome.kind,'forfeit');assert.equal(state.series.complete,true);assert.deepEqual(state.series.wins,[1,0]);assert.equal((await req('state',sc)).status,401);
  }finally{Date.now=realNow;controllers.forEach(c=>c.abort());server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
+
+test('host cancellation and loser-requested Best of 3 require the right permissions and consent',async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port,controllers=[];const realNow=Date.now;let now=realNow()+120000;Date.now=()=>now;
+ async function req(action,session={},extra={}){const response=await fetch(base+'/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...session,action,...extra})});return {status:response.status,...await response.json()};}
+ async function stream(session){const controller=new AbortController();controllers.push(controller);const response=await fetch(base+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(session),signal:controller.signal});const reader=response.body.getReader();(async()=>{try{while(!(await reader.read()).done){}}catch{}})();}
+ try{
+ const a=await req('create',{}, {name:'Host A'}),sa={code:a.code,secret:a.secret};await stream(sa);
+ const b=await req('join',{}, {code:a.code,name:'B'}),sb={code:b.code,secret:b.secret};await stream(sb);
+ const v=await req('join',{}, {code:a.code,name:'Observer'}),sv={code:v.code,secret:v.secret};await stream(sv);
+ await req('chat',sa,{message:'Chat stays open'});await req('start',sa);now+=3001;
+ assert.equal((await req('endGame',sb)).status,403);let state=await req('endGame',sa);assert.equal(state.phase,'lobby');assert.equal(state.outcome,null);assert.equal(state.series,null);assert.match(state.roomNotice.text,/host ended/);assert.equal(state.chat[0].text,'Chat stays open');assert.equal(state.players.length,3);
+ assert.deepEqual((await req('state',sv)).roomNotice,state.roomNotice);assert.equal((await req('endGame',sa)).status,400);
+ async function winA(){const moves=state.duel.turn===0?[0,3,1,4,2]:[3,0,4,1,8,2];for(const index of moves)state=await req('move',state.duel.turn===0?sa:sb,{index});}
+ await req('select',sa,{game:'ttt'});state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;const first=state.duel.turn;await winA();const initial=structuredClone(state.outcome);
+ assert.equal((await req('offerSeries',sa)).status,403);assert.equal((await req('offerSeries',sv)).status,403);
+ state=await req('offerSeries',sb);assert.equal(state.seriesOffer.status,'pending');assert.equal(state.series,null);assert.equal((await req('offerSeries',sb)).status,400);
+ assert.equal((await req('answerSeries',sb,{answer:'accept'})).status,403);assert.equal((await req('answerSeries',sv,{answer:'accept'})).status,403);
+ state=await req('answerSeries',sa,{answer:'accept'});assert.deepEqual(state.series.wins,[1,0]);assert.deepEqual(state.series.ids,[a.me,b.me]);assert.equal(state.series.round,1);assert.equal(state.outcome.kind,'round');assert.deepEqual((await req('state',sv)).series.wins,[1,0]);assert.equal((await req('answerSeries',sa,{answer:'accept'})).status,400);
+ state=await req('nextRound',sa);assert.equal(state.duel.turn,1-first);assert.equal(state.seriesOffer,null);assert.deepEqual(state.series.wins,[1,0]);
+ state=await req('endGame',sa);assert.equal(state.phase,'lobby');assert.equal(state.series,null);assert.equal(state.outcome,null);assert.equal(state.players.every(p=>p.score===0),true);
+ await req('select',sa,{game:'ttt'});state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;await winA();const result=structuredClone(state.outcome);await req('offerSeries',sb);
+ state=await req('answerSeries',sa,{answer:'decline'});assert.equal(state.series,null);assert.equal(state.seriesOffer.status,'declined');assert.deepEqual(state.outcome,result);assert.equal((await req('offerSeries',sb)).status,400);
+ await req('lobby',sa);assert.equal((await req('state',sa)).seriesOffer,null);
+ // Cancellation invalidates queued Gebeta animation frames and keeps room membership/chat.
+ await req('select',sa,{game:'gebeta'});state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;const side=state.duel.turn;state=await req('move',side===0?sa:sb,{index:side*6});assert.ok(state.duel.animation);
+ state=await req('endGame',sa);assert.equal(state.phase,'lobby');await sleep(350);state=await req('state',sa);assert.equal(state.duel,null);assert.equal(state.phase,'lobby');assert.equal(state.outcome,null);assert.equal(state.chat[0].text,'Chat stays open');
+ // A pending request closes when a competitor leaves, without rewriting the original result.
+ await req('select',sa,{game:'ttt'});state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;await winA();await req('offerSeries',sb);const finalResult=structuredClone(state.outcome);await req('leave',sa);state=await req('state',sv);assert.equal(state.seriesOffer.status,'closed');assert.equal(state.series,null);assert.deepEqual(state.outcome,finalResult);
+ }finally{Date.now=realNow;controllers.forEach(c=>c.abort());server.closeAllConnections();await new Promise(r=>server.close(r));}
+});
