@@ -25,7 +25,8 @@ test('HTTP + private push streams across all four games',async()=>{
  async function stream(session){const abort=new AbortController(),events=[];streams.push(abort);const response=await fetch(base+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(session),signal:abort.signal});assert.equal(response.status,200);const reader=response.body.getReader();let buffer='';(async()=>{try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=new TextDecoder().decode(value);let i;while((i=buffer.indexOf('\n\n'))>=0){const event=buffer.slice(0,i);buffer=buffer.slice(i+2);if(event.startsWith('data: '))events.push(JSON.parse(event.slice(6)));}}}catch{}})();return {abort,events};}
  async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await sleep(10);}assert.fail('Expected push update did not arrive');}
  try{
- const a=await request('create',{}, {name:'A'}),sa={code:a.code,secret:a.secret};let pa=await stream(sa);
+ assert.equal((await request('create',{}, {name:'A',roomName:' '})).status,400);
+ const a=await request('create',{}, {name:'A',roomName:'Friday Court'});assert.equal(a.roomName,'Friday Court');const sa={code:a.code,secret:a.secret};let pa=await stream(sa);
  const b=await request('join',{}, {name:'B',code:a.code}),sb={code:b.code,secret:b.secret};let pb=await stream(sb);
  await until(()=>pa.events.at(-1)?.players.length===2);
  assert.equal((await request('join',{}, {name:'a',code:a.code})).status,400);
@@ -108,4 +109,19 @@ test('floating chat unread counts ignore history and own messages and clear on o
  context.updateChatBadge({...base,chat:[history,{...history,id:'2'},{...history,id:'3'},{id:'4',name:'Alex',text:'Mine'}]});assert.equal(nodes.chatBadge.textContent,'2');
  nodes.chatPanel.open=true;context.updateChatBadge({...base,chat:[history]});assert.equal(nodes.chatBadge.hidden,true);
  nodes.chatPanel.open=false;context.updateChatBadge({...base,code:'OTHER',chat:[history]});assert.equal(nodes.chatBadge.hidden,true);
+});
+
+test('nickname-first entry gates Create and Join and reveals the selected fields',()=>{
+ const html=fs.readFileSync(new URL('./index.html',import.meta.url),'utf8'),source=html.slice(html.indexOf('function validNickname(){'),html.indexOf("$('create').onclick=()=>chooseEntry"));
+ const node=()=>({value:'',hidden:false,disabled:false,textContent:'',focus(){this.focused=true;},setAttribute(k,v){this[k]=v}}),nodes=Object.fromEntries(['nickname','roomcode','roomNameInput','create','join','confirmCreate','confirmJoin','nicknameHint','createFields','joinFields'].map(k=>[k,node()]));
+ const context=vm.createContext({$:id=>nodes[id],busy:false});context.validCode=undefined;vm.runInContext(source,context);
+ context.refreshEntry();assert.equal(nodes.create.disabled,true);assert.equal(nodes.join.disabled,true);
+ nodes.nickname.value='   ';context.refreshEntry();assert.equal(nodes.create.disabled,true);
+ nodes.nickname.value='Alex';context.refreshEntry();assert.equal(nodes.create.disabled,false);assert.equal(nodes.join.disabled,false);
+ context.chooseEntry('create');assert.equal(nodes.createFields.hidden,false);assert.equal(nodes.joinFields.hidden,true);assert.equal(nodes.confirmCreate.disabled,true);
+ nodes.roomNameInput.value='Friends’ Court';context.refreshEntry();assert.equal(nodes.confirmCreate.disabled,false);
+ context.chooseEntry('join');assert.equal(nodes.createFields.hidden,true);assert.equal(nodes.joinFields.hidden,false);assert.equal(nodes.confirmJoin.disabled,true);
+ nodes.roomcode.value='ab7cd8ef';context.refreshEntry();assert.equal(nodes.confirmJoin.disabled,false);
+ nodes.roomcode.value='AB7';context.refreshEntry();assert.equal(nodes.confirmJoin.disabled,true);
+ nodes.nickname.value='';context.refreshEntry();assert.equal(nodes.confirmCreate.disabled,true);assert.equal(nodes.confirmJoin.disabled,true);
 });
