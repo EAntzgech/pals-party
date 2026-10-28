@@ -14,6 +14,7 @@ function clean(r){
    if(gone.length){r.phase='ended';const winner=active.find(p=>r.duel.ids.includes(p.id));r.result=winner?winner.name+' wins by forfeit.':'Match ended without a winner.';}
    else r.duel.paused=active.some(p=>!online(p));
   }else if(active.length<2){r.phase='ended';r.result='Match ended: fewer than two players remain.';}
+  else if(r.game==='memory'&&r.memoryMode==='turn'){const current=r.players.find(p=>p.id===r.turnPlayer);if(!current||current.left){advanceMemory(r);}r.turnPaused=!online(r.players.find(p=>p.id===r.turnPlayer));}
  }
  if(r.players.every(p=>p.left))rooms.delete(r.code);
 }
@@ -22,8 +23,25 @@ function later(fn,ms){const timer=setTimeout(fn,ms);timer.unref();return timer;}
 function reserve(r,p){clearTimeout(p.expiry);p.expiry=later(()=>{if(p.stream)return;p.left=true;clean(r);publish(r);},30000);}
 function disconnect(r,p,stream){if(p.stream!==stream)return;p.stream=null;p.disconnected=true;p.seen=Date.now();reserve(r,p);clean(r);publish(r);}
 function finishRace(r){if(r.phase!=='playing'||r.game!=='race')return;const contenders=r.players.filter(p=>p.active&&!p.left),w=raceWinners(contenders);r.phase='ended';r.result=w.map(p=>p.name).join(' & ')+(w.length>1?' share the win!':' wins!');publish(r);}
+function advanceMemory(r){
+ const ids=r.turnOrder||[];let index=ids.indexOf(r.turnPlayer);for(let n=1;n<=ids.length;n++){const id=ids[(index+n)%ids.length];if(r.players.some(p=>p.id===id&&!p.left&&p.active)){r.turnPlayer=id;break;}}r.shared=[];r.turnLock=0;
+}
+function startTurnMemory(r,p){
+ if(r.host!==p.id)fail('Only the host can start.',403);if(r.phase==='playing')fail('Match already running.');const ready=r.players.filter(x=>!x.left&&online(x));if(ready.length<2)fail('Two connected players are needed.');
+ r.board=Array.from({length:24},(_,i)=>i>>1);for(let i=23;i>0;i--){const j=randomInt(i+1);[r.board[i],r.board[j]]=[r.board[j],r.board[i]];}
+ r.claimed=Array(24).fill(null);r.phase='playing';r.start=Date.now()+3000;r.result='';r.turnOrder=ready.map(x=>x.id);r.turnPlayer=r.turnOrder[randomInt(r.turnOrder.length)];r.shared=[];r.turnLock=0;r.turnPaused=false;
+ for(const x of r.players){x.score=0;x.flips=[];x.lock=0;x.active=ready.includes(x);}
+}
+function flipTurnMemory(r,p,i){
+ if(r.phase!=='playing'||Date.now()<r.start||!p.active)fail('Wait for the next match.');if(r.turnPaused)fail('Waiting for the current player.');if(r.turnPlayer!==p.id)fail('It is not your turn.');if(Date.now()<r.turnLock)fail('Wait for the cards to hide.');
+ if(!Number.isInteger(i)||i<0||i>=24||r.claimed[i]||r.shared.includes(i))fail('Choose an available card.');r.shared.push(i);
+ if(r.shared.length===2){const [a,b]=r.shared;if(r.board[a]===r.board[b]){
+  r.claimed[a]=r.claimed[b]=p.id;p.score++;r.shared=[];
+  if(r.claimed.every(Boolean)){r.phase='ended';const players=r.players.filter(x=>x.active&&!x.left),best=Math.max(...players.map(x=>x.score)),w=players.filter(x=>x.score===best);r.result=w.map(x=>x.name).join(' & ')+(w.length>1?' share the win!':' wins!');}
+ }else{r.turnLock=Date.now()+1000;const lock=r.turnLock,start=r.start;later(()=>{if(r.phase==='playing'&&r.game==='memory'&&r.memoryMode==='turn'&&r.start===start&&r.turnLock===lock){advanceMemory(r);clean(r);publish(r);}},1000);}}
+}
 function scheduleMemory(r,p){if(p.flips.length===2){const lock=p.lock;later(()=>{if(r.game==='memory'&&p.lock===lock&&p.flips.length===2){p.flips=[];publish(r);}},Math.max(0,lock-Date.now()));}}
-function view(r,p){return {serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:p.flips.filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
+function view(r,p){return {serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',memoryMode:r.memoryMode||'turn',memoryTurn:{player:r.turnPlayer,paused:!!r.turnPaused,locked:Date.now()<r.turnLock},duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:(r.game==='memory'&&r.memoryMode==='turn'?(r.shared||[]):p.flips).filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
 export const server=http.createServer(async(req,res)=>{res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');try{
 if(req.method==='GET'&&req.url==='/health'){res.setHeader('Content-Type','application/json');return res.end('{"ok":true}');}
 if(req.method==='GET'&&req.url==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(await readFile(new URL('./index.html',import.meta.url)));}
@@ -33,7 +51,7 @@ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)fail('Req
 if(['create','join'].includes(b.action)){
 const ip=req.socket.remoteAddress,now=Date.now();let l=limits.get(ip);if(!l||now-l.time>60000){l={time:now,n:0};limits.set(ip,l);}if(++l.n>20)fail('Too many attempts. Try again in a minute.',429);
 const name=String(b.name||'').trim();if(!name||name.length>18)fail('Choose a nickname of 1–18 characters.');
-if(b.action==='create'){let code;do{code=Array.from({length:8},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('');}while(rooms.has(code));r={game:'memory',revision:0,code,players:[],chat:[],phase:'lobby',board:[],claimed:Array(24).fill(null),result:'',start:0};rooms.set(code,r);}else{r=rooms.get(String(b.code||'').trim().toUpperCase());if(!r)fail('Room not found. Check the code.');clean(r);}
+if(b.action==='create'){let code;do{code=Array.from({length:8},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('');}while(rooms.has(code));r={game:'memory',memoryMode:'turn',shared:[],revision:0,code,players:[],chat:[],phase:'lobby',board:[],claimed:Array(24).fill(null),result:'',start:0};rooms.set(code,r);}else{r=rooms.get(String(b.code||'').trim().toUpperCase());if(!r)fail('Room not found. Check the code.');clean(r);}
 if(r.players.filter(x=>!x.left).length>=8)fail('Room is full.');if(r.players.some(x=>!x.left&&x.name.toLowerCase()===name.toLowerCase()))fail('That nickname is taken. Choose another.');
 p={id:token(),secret:token(),name,seen:Date.now(),score:0,active:false,left:false,flips:[],lock:0};r.players.push(p);if(!r.host)r.host=p.id;reserve(r,p);publish(r);
 return res.setHeader('Content-Type','application/json').end(JSON.stringify({secret:p.secret,...view(r,p)}));}
@@ -46,6 +64,7 @@ if(req.url==='/events'){
 }
 if(p.flips.length===2&&Date.now()>=p.lock)p.flips=[];
 if(b.action==='chat'){const message=String(b.message||'').trim();if(!message||message.length>240)fail('Use 1–240 characters.');if(Date.now()-(p.lastChat||0)<700)fail('Please wait a moment.');p.lastChat=Date.now();r.chat.push({name:p.name,text:message});r.chat=r.chat.slice(-80);}
+else if(b.action==='memoryMode'){if(r.host!==p.id)fail('Only the host can choose a mode.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['turn','race'].includes(b.mode))fail('Unknown mode.');r.memoryMode=b.mode;r.phase='lobby';r.shared=[];}
 else if(b.action==='select'){
  if(r.host!==p.id)fail('Only the host can choose a game.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['memory','race','ttt','gebeta'].includes(b.game))fail('Unknown game.');r.game=b.game;r.phase='lobby';r.result='';r.duel=null;
 }
@@ -79,6 +98,8 @@ else if(b.action==='move'){
   }else{const key=positionKey(d);if(d.history.has(key)){r.phase='ended';r.result='Repeated board and turn — draw.';}else d.history.add(key);}
  }
 }
+else if(b.action==='start'&&r.game==='memory'&&r.memoryMode==='turn'){startTurnMemory(r,p);}
+else if(b.action==='flip'&&r.game==='memory'&&r.memoryMode==='turn'){flipTurnMemory(r,p,b.index);}
 else if(b.action==='start'&&r.game!=='memory')fail('Use the selected game’s start button.');
 else if(b.action==='flip'&&r.game!=='memory')fail('Memory Match is not selected.');
 else if(b.action==='start'){if(r.host!==p.id)fail('Only the host can start.',403);if(r.phase==='playing')fail('Match already running.');const ready=r.players.filter(x=>!x.left&&online(x));if(ready.length<2)fail('Two connected players are needed.');r.board=Array.from({length:24},(_,i)=>i>>1);for(let i=23;i>0;i--){let j=randomInt(i+1);[r.board[i],r.board[j]]=[r.board[j],r.board[i]];}r.claimed=Array(24).fill(null);r.phase='playing';r.start=Date.now()+3000;r.result='';for(const x of r.players){x.score=0;x.flips=[];x.lock=0;x.active=ready.includes(x);}}

@@ -27,7 +27,26 @@ test('HTTP + private push streams across all four games',async()=>{
  assert.equal((await request('state',{code:a.code,secret:'bad'})).status,401);
  await request('chat',sa,{message:'Private hello'});await until(()=>pb.events.at(-1)?.chat.length===1);
  assert.equal(pb.events.at(-1).chat[0].text,'Private hello');const count=pb.events.length;await sleep(180);assert.equal(pb.events.length,count,'Idle room must not emit state on a timer');
- await request('start',sa);now+=3001;
+ // Turn Memory is the default. Shared reveals, extra turns, mismatch delay and expiry are server-enforced.
+ let turnState=await request('start',sa);assert.equal(turnState.memoryMode,'turn');now+=3001;
+ const turnSessions={[a.me]:sa,[b.me]:sb},firstTurn=turnState.memoryTurn.player;
+ assert.equal((await request('flip',turnSessions[firstTurn===a.me?b.me:a.me],{index:0})).status,400);
+ let mismatch=false;
+ for(let i=0;i<24&&turnState.phase==='playing';i+=2){
+  const actor=turnState.memoryTurn.player,session=turnSessions[actor];
+  turnState=await request('flip',session,{index:i});
+  const observer=await request('state',turnSessions[actor===a.me?b.me:a.me]);assert.deepEqual(observer.flips,turnState.flips);
+  turnState=await request('flip',session,{index:i+1});
+  if(turnState.memoryTurn.locked){mismatch=true;assert.equal((await request('flip',session,{index:(i+2)%24})).status,400);await sleep(1050);turnState=await request('state',session);assert.notEqual(turnState.memoryTurn.player,actor);assert.equal(turnState.flips.length,0);break;}
+  assert.equal(turnState.memoryTurn.player,actor,'Matching pair keeps the turn');
+ }
+ if(mismatch){
+  const actor=turnState.memoryTurn.player,connection=actor===a.me?pa:pb;connection.abort.abort();await until(()=>((actor===a.me?pb:pa).events.at(-1)?.memoryTurn?.paused));await stream(turnSessions[actor]);
+  // Leaving during a turn ends a two-player match cleanly.
+ }
+ await request('leave',sb);turnState=await request('state',sa);assert.equal(turnState.phase,'ended');
+ const replacement=await request('join',{}, {name:'B',code:a.code});sb.secret=replacement.secret;b.me=replacement.me;await stream(sb);
+ await request('memoryMode',sa,{mode:'race'});await request('start',sa);now+=3001;
  let s=await request('flip',sa,{index:0});assert.equal(s.flips.length,1);await until(()=>pb.events.at(-1)?.phase==='playing');assert.equal(pb.events.at(-1).flips.length,0);
  // Learn a matching pair using legal moves and time advancement.
  const known=new Map(s.flips.map(f=>[f.i,f.face]));let pair;
@@ -66,3 +85,4 @@ test('HTTP + private push streams across all four games',async()=>{
  s=await request('begin',sa);now=s.endsAt;await request('tap',sa);s=await request('state',sa);assert.equal(s.phase,'ended');assert.match(s.result,/share the win/);
  }finally{Date.now=realNow;for(const s of streams)s.abort();server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
+
