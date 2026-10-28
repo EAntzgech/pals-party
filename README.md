@@ -1,4 +1,4 @@
-# Pals Party
+# Saba_Party
 
 Play at https://pals-party.onrender.com. Create a room, share its eight-character code and join with separate nicknames. The host chooses and starts each game. Rooms hold 2–8 people. Late joiners watch until the next match. Room chat is available throughout.
 
@@ -20,3 +20,7 @@ Refreshing restores the tab's private session token within 30 seconds. Open a fr
 Requires Node 22. Set PORT=4317 if desired, then run `npm start`. Open the displayed localhost port in two browser windows. Run `npm test` for rule and HTTP/push-stream integration checks.
 
 Render runs one Free Node instance. Auto-deploy is off: publish updates manually between matches. Sleeping, restarting or redeploying clears rooms, chat and scores. Free services sleep after 15 idle minutes and can take about a minute to wake. See DEPLOY-RENDER.md for hosting instructions and limits.
+
+## Visual theme
+
+Ancient royal court styling: imperial obsidian #120D1C, antique crimson #2B141D, parchment #FFF8E7 and gold #FFB800. Phone screens put the central game card first with stacked game choices below; all game rules, timing, scoring and connection logic are unchanged.
