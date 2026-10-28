@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: pals-party
+    runtime: node
+    plan: free
+    numInstances: 1
+    buildCommand: node --check server.mjs
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_ENV
+        value: production
+
