@@ -72,7 +72,10 @@ function scheduleMemory(r,p){if(p.flips.length===2){const lock=p.lock;later(()=>
 function view(r,p){settleOutcome(r);return {seriesOffer:r.seriesOffer||null,roomNotice:r.roomNotice||null,seriesMode:r.seriesMode||'single',series:r.series||null,outcome:r.outcome||null,roomName:r.roomName||"Friends’ Court",serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',memoryMode:r.memoryMode||'turn',memoryTurn:{player:r.turnPlayer,paused:!!r.turnPaused,locked:Date.now()<r.turnLock},duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused,animation:r.duel.animation||null}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:(r.game==='memory'&&r.memoryMode==='turn'?(r.shared||[]):p.flips).filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
 export const server=http.createServer(async(req,res)=>{res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');try{
 if(req.method==='GET'&&req.url==='/health'){res.setHeader('Content-Type','application/json');return res.end('{"ok":true}');}
-if(req.method==='GET'&&req.url==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(await readFile(new URL('./index.html',import.meta.url)));}
+if(req.method==='GET'&&['/competition.js','/competition.css'].includes(req.url)){res.setHeader('Content-Type',req.url.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8');return res.end(await readFile(new URL('.'+req.url,import.meta.url)));}
+if(req.method==='GET'&&req.url==='/demo/gebeta'){const cases=[{id:'opening',title:'Opening move',board:Array(12).fill(4),side:0,pit:0},{id:'capture',title:'Capture example',board:[1,3,4,4,4,8,4,4,4,4,4,4],side:0,pit:0}].map(c=>({...c,initialBoard:c.board,initialCaptured:[0,0],...sowGebeta(c.board,[0,0],c.side,c.pit)}));res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({variant:'Saba_Party’s Gebeta variant',cases}));}
+if(req.method==='GET'&&req.url.split('?')[0]==='/'){
+res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(await readFile(new URL('./index.html',import.meta.url)));}
 if(req.method!=='POST'||!['/api','/events'].includes(req.url))return res.writeHead(404).end();
 if(req.headers.origin&&!['http://','https://'].some(s=>req.headers.origin===s+req.headers.host))fail('Origin not allowed',403);
 let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)fail('Request too large',413);}const b=JSON.parse(raw);let r,p;
@@ -191,4 +194,5 @@ res.setHeader('Content-Type','application/json').end(JSON.stringify(view(r,p)));
 }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'}).end(JSON.stringify({error:e.message}));}});
 // Room changes, reconnect expiry and game deadlines trigger updates; no state polling loop.
 if(process.env.NODE_ENV!=='test')server.listen(Number(process.env.PORT)||3000,'0.0.0.0',()=>console.log('Pals Party listening on port', Number(process.env.PORT)||3000));
+
 

@@ -49,3 +49,12 @@ Render runs one Free Node instance, with auto-deploy disabled. Publish updates b
 The host can use End game during play or an unfinished series. Confirmation returns everyone to the lobby, clears the cancelled match/series without a winner, announces the cancellation and preserves the room and chat. Animation and race deadlines from that match cannot affect the lobby. Other players retain Leave room.
 
 After a normal Single round win in Tic-Tac-Toe or Gebeta, only the loser can ask for Best of 3 from Results. Only the winner can accept or decline. Acceptance credits the first win (1–0), locks the existing competitors and lets the host start the next round with the alternating starter. Declining preserves the original result. One request is permitted per round; a pending request closes if a competitor leaves.
+
+## Competition refinement
+
+Guest play remains nickname → Create/Join → game, without registration. Gebeta is featured as Saba_Party’s chosen rules variant. A replayable opening move and capture example are generated directly by the same `sowGebeta` rules engine used for matches; they do not change live rooms.
+
+Room invitation links contain only `?room=CODE` and prefill Join. Copy code / share invitation use native sharing when available and a selectable copy fallback. Nickname, invalid-code and room-entry errors appear beside their fields. Scores, pit ownership, sowing direction, spectator status, leave consequences and Tic-Tac-Toe winning lines are clearer. Reduced-motion settings disable interface movement; server sowing timings and move locks remain unchanged.
+
+Serve `competition.js` and `competition.css` alongside the existing page. No build or external runtime dependencies are required. `npm test` includes original game/reconnect/series checks and teaching-engine/invitation/winning-line checks. Keep the Free Render plan. Sites forwards only the fixed game paths and these public assets; no account or Supabase server keys are needed for this version.
+
