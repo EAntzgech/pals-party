@@ -41,7 +41,7 @@ function flipTurnMemory(r,p,i){
  }else{r.turnLock=Date.now()+1000;const lock=r.turnLock,start=r.start;later(()=>{if(r.phase==='playing'&&r.game==='memory'&&r.memoryMode==='turn'&&r.start===start&&r.turnLock===lock){advanceMemory(r);clean(r);publish(r);}},1000);}}
 }
 function scheduleMemory(r,p){if(p.flips.length===2){const lock=p.lock;later(()=>{if(r.game==='memory'&&p.lock===lock&&p.flips.length===2){p.flips=[];publish(r);}},Math.max(0,lock-Date.now()));}}
-function view(r,p){return {serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',memoryMode:r.memoryMode||'turn',memoryTurn:{player:r.turnPlayer,paused:!!r.turnPaused,locked:Date.now()<r.turnLock},duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:(r.game==='memory'&&r.memoryMode==='turn'?(r.shared||[]):p.flips).filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
+function view(r,p){return {serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',memoryMode:r.memoryMode||'turn',memoryTurn:{player:r.turnPlayer,paused:!!r.turnPaused,locked:Date.now()<r.turnLock},duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused,animation:r.duel.animation||null}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:(r.game==='memory'&&r.memoryMode==='turn'?(r.shared||[]):p.flips).filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
 export const server=http.createServer(async(req,res)=>{res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');try{
 if(req.method==='GET'&&req.url==='/health'){res.setHeader('Content-Type','application/json');return res.end('{"ok":true}');}
 if(req.method==='GET'&&req.url==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(await readFile(new URL('./index.html',import.meta.url)));}
@@ -85,17 +85,25 @@ else if(b.action==='tap'){
  if(p.score===100&&r.raceFinishBucket==null){r.raceFinishBucket=Math.floor(now/50);later(()=>finishRace(r),50-now%50);}
 }
 else if(b.action==='move'){
- if(!TWO_PLAYER.has(r.game)||r.phase!=='playing'||Date.now()<r.start)fail('Wait for the game.');const d=r.duel;if(d.paused)fail('Waiting for the other player to reconnect.');if(d.ids[d.turn]!==p.id)fail('It is not your turn.');const side=d.turn,i=b.index;
+ if(!TWO_PLAYER.has(r.game)||r.phase!=='playing'||Date.now()<r.start)fail('Wait for the game.');const d=r.duel;if(d.animation)fail('Wait for the sowing to finish.');if(d.paused)fail('Waiting for the other player to reconnect.');if(d.ids[d.turn]!==p.id)fail('It is not your turn.');const side=d.turn,i=b.index;
  if(r.game==='ttt'){
   if(!Number.isInteger(i)||i<0||i>8||d.cells[i])fail('Choose an empty square.');d.cells[i]=d.symbols[side];const result=ticResult(d.cells);
   if(result){r.phase='ended';r.result=result==='draw'?'It’s a draw!':p.name+' wins!';if(result!=='draw')p.score=1;}else d.turn=1-side;
  }else {
-  if(!Number.isInteger(i)||i<side*6||i>=side*6+6||!d.cells[i])fail('Choose a nonempty pit on your side.');const next=sowGebeta(d.cells,d.captured,side,i);d.cells=next.board;d.captured=next.captured;d.turn=1-side;
+  if(!Number.isInteger(i)||i<side*6||i>=side*6+6||!d.cells[i])fail('Choose a nonempty pit on your side.');const next=sowGebeta(d.cells,d.captured,side,i),started=Date.now();
+  const applyFrame=frame=>{d.cells=[...frame.cells];d.captured=[...frame.captured];d.animation={pit:frame.pit,kind:frame.kind,hand:frame.hand,endsAt:started+next.duration};for(let k=0;k<2;k++)r.players.find(x=>x.id===d.ids[k]).score=d.captured[k];};
+  applyFrame(next.frames[0]);
+  for(const frame of next.frames.slice(1))later(()=>{if(r.duel===d&&r.phase==='playing'){applyFrame(frame);publish(r);}},frame.at);
+  later(()=>{if(r.duel!==d||r.phase!=='playing')return;d.animation=null;
+  d.cells=next.board;d.captured=next.captured;d.turn=1-side;
   for(let k=0;k<2;k++)r.players.find(x=>x.id===d.ids[k]).score=d.captured[k];
   if(next.loop){r.phase='ended';r.result='Repeated sowing position — draw.';}
   else if(d.cells.slice(d.turn*6,d.turn*6+6).every(n=>n===0)){
    d.captured[side]+=d.cells.reduce((a,c)=>a+c,0);d.cells.fill(0);for(let k=0;k<2;k++)r.players.find(x=>x.id===d.ids[k]).score=d.captured[k];r.phase='ended';r.result=d.captured[0]===d.captured[1]?'It’s a draw!':r.players.find(x=>x.id===d.ids[d.captured[0]>d.captured[1]?0:1]).name+' wins!';
   }else{const key=positionKey(d);if(d.history.has(key)){r.phase='ended';r.result='Repeated board and turn — draw.';}else d.history.add(key);}
+  clean(r);publish(r);
+  },next.duration);
+
  }
 }
 else if(b.action==='start'&&r.game==='memory'&&r.memoryMode==='turn'){startTurnMemory(r,p);}
