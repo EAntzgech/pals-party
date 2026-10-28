@@ -6,6 +6,12 @@ const rooms=new Map(),limits=new Map();
 const token=()=>randomBytes(24).toString('hex'), online=p=>!!p.stream||(!p.disconnected&&Date.now()-p.seen<5000);
 const fail=(m,s=400)=>{throw Object.assign(new Error(m),{status:s});};
 function clean(r){
+ if(r.series&&!r.series.complete&&r.series.ids.some(id=>r.players.find(p=>p.id===id)?.left)){
+  const winners=r.series.ids.filter(id=>!r.players.find(p=>p.id===id)?.left);r.series.complete=true;r.phase='ended';
+  const name=winners.length?r.series.names[r.series.ids.indexOf(winners[0])]:null;r.result=name?name+' wins the series by forfeit.':'Series cancelled without a winner.';
+  r.outcome={id:'forfeit:'+r.roundId,kind:name?'forfeit':'cancelled',title:r.result,winnerIds:winners,scores:r.series.ids.map((id,i)=>({id,name:r.series.names[i],score:r.series.wins[i]})),detail:'Series ended because a competitor left or did not reconnect.',seriesComplete:true,seriesForfeit:true};
+ }
+
  if(!r.players.some(p=>p.id===r.host&&!p.left&&online(p))){const p=r.players.find(p=>!p.left&&online(p));if(p)r.host=p.id;}
  if(r.phase==='playing'){
   const active=r.players.filter(p=>p.active&&!p.left);
@@ -18,7 +24,27 @@ function clean(r){
  }
  if(r.players.every(p=>p.left))rooms.delete(r.code);
 }
-function publish(r){r.revision=(r.revision||0)+1;for(const p of r.players)if(p.stream&&!p.left)p.stream.write('data: '+JSON.stringify(view(r,p))+'\n\n');}
+export function settleOutcome(r){
+ if(r.phase!=='ended'||r.outcome?.seriesForfeit||r.settledRound===r.roundId)return;
+ r.settledRound=r.roundId;
+ const cancelled=/fewer than|without a winner|cancelled/i.test(r.result),draw=/draw/i.test(r.result),forfeit=/forfeit/i.test(r.result);
+ const contenders=TWO_PLAYER.has(r.game)?r.duel.ids.map(id=>r.players.find(p=>p.id===id)).filter(Boolean):r.players.filter(p=>p.active&&!p.left);
+ const eligible=forfeit?contenders.filter(p=>!p.left):contenders,best=Math.max(...eligible.map(p=>p.score));
+ const winners=cancelled||draw?[]:forfeit?eligible:eligible.filter(p=>p.score===best);
+ let kind=cancelled?'cancelled':draw?'draw':forfeit?'forfeit':winners.length>1?'shared':'win',title=cancelled?'Match cancelled':draw?'It’s a draw!':winners.map(p=>p.name).join(' & ')+(winners.length>1?' share the win!':' wins!');
+ if(forfeit&&winners.length===1)title=winners[0].name+' wins by forfeit.';
+ let detail=r.game==='gebeta'?'Seeds captured':r.game==='memory'?'Pairs found':r.game==='race'?'Steps completed':'Round score';
+ if(r.series&&!r.series.complete){
+  if(winners.length===1){const i=r.series.ids.indexOf(winners[0].id);if(i>=0)r.series.wins[i]++;}
+  const index=r.series.wins.findIndex(n=>n>=2);r.series.complete=index>=0||cancelled||forfeit;
+  if(index>=0){kind='series';title=r.series.names[index]+' wins the series!';}
+  else if(draw){title='Round '+r.series.round+' drawn';}
+  else if(winners.length===1){kind='round';title=winners[0].name+' wins this round!';}
+  detail='Round '+r.series.round+' score · First to two round wins';
+ }
+ r.outcome={id:String(r.roundId),kind,title,detail,winnerIds:winners.map(p=>p.id),scores:contenders.map(p=>({id:p.id,name:p.name,score:p.score})),seriesComplete:!!r.series?.complete};
+}
+function publish(r){settleOutcome(r);r.revision=(r.revision||0)+1;for(const p of r.players)if(p.stream&&!p.left)p.stream.write('data: '+JSON.stringify(view(r,p))+'\n\n');}
 function later(fn,ms){const timer=setTimeout(fn,ms);timer.unref();return timer;}
 function reserve(r,p){clearTimeout(p.expiry);p.expiry=later(()=>{if(p.stream)return;p.left=true;clean(r);publish(r);},30000);}
 function disconnect(r,p,stream){if(p.stream!==stream)return;p.stream=null;p.disconnected=true;p.seen=Date.now();reserve(r,p);clean(r);publish(r);}
@@ -41,7 +67,7 @@ function flipTurnMemory(r,p,i){
  }else{r.turnLock=Date.now()+1000;const lock=r.turnLock,start=r.start;later(()=>{if(r.phase==='playing'&&r.game==='memory'&&r.memoryMode==='turn'&&r.start===start&&r.turnLock===lock){advanceMemory(r);clean(r);publish(r);}},1000);}}
 }
 function scheduleMemory(r,p){if(p.flips.length===2){const lock=p.lock;later(()=>{if(r.game==='memory'&&p.lock===lock&&p.flips.length===2){p.flips=[];publish(r);}},Math.max(0,lock-Date.now()));}}
-function view(r,p){return {roomName:r.roomName||"Friends’ Court",serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',memoryMode:r.memoryMode||'turn',memoryTurn:{player:r.turnPlayer,paused:!!r.turnPaused,locked:Date.now()<r.turnLock},duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused,animation:r.duel.animation||null}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:(r.game==='memory'&&r.memoryMode==='turn'?(r.shared||[]):p.flips).filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
+function view(r,p){settleOutcome(r);return {seriesMode:r.seriesMode||'single',series:r.series||null,outcome:r.outcome||null,roomName:r.roomName||"Friends’ Court",serverNow:Date.now(),revision:r.revision||0,game:r.game||'memory',memoryMode:r.memoryMode||'turn',memoryTurn:{player:r.turnPlayer,paused:!!r.turnPaused,locked:Date.now()<r.turnLock},duel:r.duel?{ids:r.duel.ids,turn:r.duel.turn,symbols:r.duel.symbols,cells:r.duel.cells,captured:r.duel.captured,paused:r.duel.paused,animation:r.duel.animation||null}:null,endsAt:r.endsAt,code:r.code,me:p.id,host:r.host,phase:r.phase,start:r.start,result:r.result,players:r.players.filter(x=>!x.left).map(x=>({id:x.id,name:x.name,score:x.score,online:online(x),active:x.active})),chat:r.chat,claimed:r.claimed,flips:(r.game==='memory'&&r.memoryMode==='turn'?(r.shared||[]):p.flips).filter(i=>!r.claimed[i]).map(i=>({i,face:r.board[i]}))};}
 export const server=http.createServer(async(req,res)=>{res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');try{
 if(req.method==='GET'&&req.url==='/health'){res.setHeader('Content-Type','application/json');return res.end('{"ok":true}');}
 if(req.method==='GET'&&req.url==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(await readFile(new URL('./index.html',import.meta.url)));}
@@ -64,15 +90,32 @@ if(req.url==='/events'){
 }
 if(p.flips.length===2&&Date.now()>=p.lock)p.flips=[];
 if(b.action==='chat'){const message=String(b.message||'').trim();if(!message||message.length>240)fail('Use 1–240 characters.');if(Date.now()-(p.lastChat||0)<700)fail('Please wait a moment.');p.lastChat=Date.now();r.chat.push({id:token(),name:p.name,text:message});r.chat=r.chat.slice(-80);}
-else if(b.action==='memoryMode'){if(r.host!==p.id)fail('Only the host can choose a mode.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['turn','race'].includes(b.mode))fail('Unknown mode.');r.memoryMode=b.mode;r.phase='lobby';r.shared=[];}
-else if(b.action==='select'){
- if(r.host!==p.id)fail('Only the host can choose a game.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['memory','race','ttt','gebeta'].includes(b.game))fail('Unknown game.');r.game=b.game;r.phase='lobby';r.result='';r.duel=null;
+else if(b.action==='lobby'){
+ if(r.host!==p.id)fail('Only the host can return the room to the lobby.',403);if(r.phase==='playing')fail('Finish the current match first.');r.phase='lobby';r.series=null;r.outcome=null;r.seriesMode='single';r.result='';r.duel=null;for(const x of r.players){x.active=false;x.score=0;}
 }
-else if(b.action==='begin'){
+else if(b.action==='seriesFormat'){
+ if(r.host!==p.id)fail('Only the host can change the format.',403);if(r.phase!=='lobby')fail('Return to the lobby first.');if(!TWO_PLAYER.has(r.game)||!['single','best3'].includes(b.mode))fail('Invalid series format.');r.seriesMode=b.mode;
+}
+else if(b.action==='memoryMode'){if(r.series&&!r.series.complete)fail('Finish the series or return to the lobby.');if(r.host!==p.id)fail('Only the host can choose a mode.',403);if(r.phase==='playing')fail('Finish the current game first.');if(!['turn','race'].includes(b.mode))fail('Unknown mode.');r.memoryMode=b.mode;r.phase='lobby';r.shared=[];}
+else if(b.action==='select'){
+ if(r.host!==p.id)fail('Only the host can choose a game.',403);if(r.phase==='playing')fail('Finish the current game first.');if(r.series&&!r.series.complete)fail('Finish the series or return to the lobby.');if(!['memory','race','ttt','gebeta'].includes(b.game))fail('Unknown game.');r.series=null;r.outcome=null;r.seriesMode='single';r.game=b.game;r.phase='lobby';r.result='';r.duel=null;
+}
+else if(['begin','nextRound','replay'].includes(b.action)){
  if(r.host!==p.id)fail('Only the host can start.',403);if(r.phase==='playing')fail('Match already running.');if(!['race','ttt','gebeta'].includes(r.game))fail('Select a game first.');
+ const nextRound=b.action==='nextRound';
+ if(nextRound&&(!r.series||r.series.complete||r.phase!=='ended'))fail('There is no next round.');
+ if(b.action==='replay'&&(r.phase!=='ended'||(r.series&&!r.series.complete)))fail('Finish the series first.');
+ if(b.action==='begin'&&r.series&&!r.series.complete)fail('Use Next round to continue this series.');
  const ready=r.players.filter(x=>!x.left&&online(x));let chosen=ready;
+ if(nextRound||b.action==='replay'){if(TWO_PLAYER.has(r.game))b.ids=r.series?.ids||r.duel.ids;}
+
  if(TWO_PLAYER.has(r.game)){if(!Array.isArray(b.ids)||b.ids.length!==2||new Set(b.ids).size!==2)fail('Select two different players.');chosen=b.ids.map(id=>ready.find(x=>x.id===id));if(chosen.some(x=>!x))fail('Select two connected players.');}
- if(chosen.length<2)fail('Two connected players are needed.');for(const x of r.players){x.active=chosen.includes(x);x.score=0;x.taps=[];x.flips=[];}
+ if(chosen.length<2)fail('Two connected players are needed.');
+ if(TWO_PLAYER.has(r.game)&&r.seriesMode==='best3'){
+  if(nextRound)r.series.round++;
+  else r.series={game:r.game,ids:chosen.map(x=>x.id),names:chosen.map(x=>x.name),wins:[0,0],round:1,complete:false};
+ }else r.series=null;
+ for(const x of r.players){x.active=chosen.includes(x);x.score=0;x.taps=[];x.flips=[];}
  r.phase='playing';r.result='';r.start=Date.now()+3000;r.endsAt=null;r.raceFinishBucket=null;
  if(TWO_PLAYER.has(r.game)){r.duel=newDuel(r,r.game,chosen.map(x=>x.id));r.duel.history.add(positionKey(r.duel));}
  else {r.duel=null;r.endsAt=r.start+60000;const end=r.endsAt;later(()=>{if(r.endsAt===end)finishRace(r);},end-Date.now());}
@@ -113,6 +156,7 @@ else if(b.action==='flip'&&r.game!=='memory')fail('Memory Match is not selected.
 else if(b.action==='start'){if(r.host!==p.id)fail('Only the host can start.',403);if(r.phase==='playing')fail('Match already running.');const ready=r.players.filter(x=>!x.left&&online(x));if(ready.length<2)fail('Two connected players are needed.');r.board=Array.from({length:24},(_,i)=>i>>1);for(let i=23;i>0;i--){let j=randomInt(i+1);[r.board[i],r.board[j]]=[r.board[j],r.board[i]];}r.claimed=Array(24).fill(null);r.phase='playing';r.start=Date.now()+3000;r.result='';for(const x of r.players){x.score=0;x.flips=[];x.lock=0;x.active=ready.includes(x);}}
 else if(b.action==='flip'){if(r.phase!=='playing'||Date.now()<r.start||!p.active)fail('Wait for the next match.');const i=b.index;if(!Number.isInteger(i)||i<0||i>=24)fail('Invalid card.');if(Date.now()<p.lock)fail('Wait for your cards to turn back.');p.flips=p.flips.filter(j=>!r.claimed[j]);if(r.claimed[i]||p.flips.includes(i))fail('Choose an available card.');p.flips.push(i);if(p.flips.length===2){const [a,c]=p.flips;if(r.board[a]===r.board[c]){r.claimed[a]=r.claimed[c]=p.id;p.score++;for(const x of r.players)x.flips=x.flips.filter(j=>j!==a&&j!==c);if(r.claimed.every(Boolean)){r.phase='ended';const ps=r.players.filter(x=>x.active&&!x.left),best=Math.max(...ps.map(x=>x.score)),w=ps.filter(x=>x.score===best);r.result=w.map(x=>x.name).join(' & ')+(w.length>1?' share the win!':' wins!');}}else p.lock=Date.now()+1000;}}
 else if(b.action==='leave'){p.left=true;clean(r);}else if(b.action!=='state')fail('Unknown action.');
+if(['start','begin','nextRound','replay'].includes(b.action)){r.roundId=(r.roundId||0)+1;r.outcome=null;}
 if(b.action==='flip')scheduleMemory(r,p);
 if(b.action==='start'){const start=r.start;later(()=>{if(r.start===start&&r.phase==='playing')publish(r);},3000);}
 if(b.action==='leave'&&p.stream){const stream=p.stream;p.stream=null;stream.end();}

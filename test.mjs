@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {ticResult,sowGebeta,raceWinners} from './games.mjs';
-process.env.NODE_ENV='test';const {server}=await import('./server.mjs');
+process.env.NODE_ENV='test';const {server,settleOutcome}=await import('./server.mjs');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 test('new game rules: wins, draws, captures, relay sowing and conservation',()=>{
  assert.equal(ticResult(['X','X','X',null,'O',null,'O',null,null]),'X');
@@ -92,7 +92,7 @@ test('HTTP + private push streams across all four games',async()=>{
  // Both players finish within one fixed 50 ms server window.
  s=await request('begin',sa);now+=3001;
  for(let n=0;n<99;n++){assert.equal((await request('tap',sa)).status,200);assert.equal((await request('tap',se)).status,200);if(n%10===9)now+=1001;}
- assert.equal((await request('tap',sa)).status,200);assert.equal((await request('tap',se)).status,200);await sleep(70);s=await request('state',sa);assert.match(s.result,/A & E share the win/);
+ now=Math.ceil(now/50)*50;const finishes=await Promise.all([request('tap',sa),request('tap',se)]);finishes.forEach(r=>assert.equal(r.status,200));await sleep(70);s=await request('state',sa);assert.match(s.result,/A & E share the win/);
  s=await request('begin',sa);now=s.endsAt;await request('tap',sa);s=await request('state',sa);assert.equal(s.phase,'ended');assert.match(s.result,/share the win/);
  }finally{Date.now=realNow;for(const s of streams)s.abort();server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
@@ -124,4 +124,45 @@ test('nickname-first entry gates Create and Join and reveals the selected fields
  nodes.roomcode.value='ab7cd8ef';context.refreshEntry();assert.equal(nodes.confirmJoin.disabled,false);
  nodes.roomcode.value='AB7';context.refreshEntry();assert.equal(nodes.confirmJoin.disabled,true);
  nodes.nickname.value='';context.refreshEntry();assert.equal(nodes.confirmCreate.disabled,true);assert.equal(nodes.confirmJoin.disabled,true);
+});
+
+test('authoritative Gebeta series outcomes, draws, shared wins and cancellation settle once',()=>{
+ const r={game:'gebeta',phase:'ended',roundId:1,result:'A wins!',players:[{id:'a',name:'A',score:28},{id:'b',name:'B',score:20}],duel:{ids:['a','b']},series:{ids:['a','b'],names:['A','B'],wins:[0,0],round:1,complete:false}};
+ settleOutcome(r);assert.deepEqual(r.series.wins,[1,0]);assert.equal(r.outcome.kind,'round');settleOutcome(r);assert.deepEqual(r.series.wins,[1,0]);
+ r.roundId++;r.series.round++;r.result='It’s a draw!';r.players.forEach(p=>p.score=24);settleOutcome(r);assert.deepEqual(r.series.wins,[1,0]);assert.equal(r.outcome.kind,'draw');
+ r.roundId++;r.series.round++;r.result='A wins!';r.players[0].score=32;r.players[1].score=16;settleOutcome(r);assert.deepEqual(r.series.wins,[2,0]);assert.equal(r.series.complete,true);assert.equal(r.outcome.kind,'series');
+ const shared={game:'memory',phase:'ended',roundId:1,result:'A & B share the win!',players:[{id:'a',name:'A',score:6,active:true},{id:'b',name:'B',score:6,active:true}]};settleOutcome(shared);assert.equal(shared.outcome.kind,'shared');assert.equal(shared.outcome.winnerIds.length,2);
+ shared.roundId++;shared.result='Match ended: fewer than two players remain.';settleOutcome(shared);assert.equal(shared.outcome.kind,'cancelled');assert.equal(shared.outcome.winnerIds.length,0);
+});
+test('best-of-three lifecycle with spectator, draws, refresh, rematch and forfeits',async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port,controllers=[];const realNow=Date.now;let now=realNow();Date.now=()=>now;
+ async function req(action,session={},extra={}){const response=await fetch(base+'/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...session,action,...extra})});return {status:response.status,...await response.json()};}
+ async function stream(session){const abort=new AbortController();controllers.push(abort);const response=await fetch(base+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(session),signal:abort.signal});const reader=response.body.getReader();(async()=>{try{while(!(await reader.read()).done){}}catch{}})();return abort;}
+ try{
+ const a=await req('create',{}, {name:'Series A'}),sa={code:a.code,secret:a.secret};await stream(sa);
+ const b=await req('join',{}, {name:'Series B',code:a.code}),sb={code:b.code,secret:b.secret};let bs=await stream(sb);
+ const v=await req('join',{}, {name:'Spectator',code:a.code}),sv={code:v.code,secret:v.secret};await stream(sv);
+ const sessions={[a.me]:sa,[b.me]:sb};await req('select',sa,{game:'ttt'});assert.equal((await req('seriesFormat',sv,{mode:'best3'})).status,403);await req('seriesFormat',sa,{mode:'best3'});
+ let state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;const first=state.duel.turn;
+ assert.equal((await req('move',sv,{index:0})).status,400);
+ async function winA(){const wanted=state.duel.ids.indexOf(a.me),moves=state.duel.turn===wanted?[0,3,1,4,2]:[3,0,4,1,8,2];for(const index of moves)state=await req('move',sessions[state.duel.ids[state.duel.turn]],{index});}
+ await winA();assert.equal(state.outcome.kind,'round');assert.deepEqual(state.series.wins,[1,0]);assert.deepEqual((await req('state',sv)).outcome,state.outcome);
+ for(let n=0;n<3;n++)await req('state',sa);assert.deepEqual((await req('state',sa)).series.wins,[1,0]);
+ assert.equal((await req('begin',sa,{ids:[a.me,v.me]})).status,400);assert.equal((await req('nextRound',sv)).status,403);
+ state=await req('nextRound',sa);assert.equal(state.duel.turn,1-first);assert.deepEqual(state.series.ids,[a.me,b.me]);now+=3001;
+ assert.equal((await req('nextRound',sa)).status,400);
+ for(const index of [0,1,2,4,3,5,7,6,8])state=await req('move',sessions[state.duel.ids[state.duel.turn]],{index});
+ assert.equal(state.outcome.kind,'draw');assert.deepEqual(state.series.wins,[1,0]);
+ // Reconnecting keeps the same competitor identity and series progress.
+ bs.abort();bs=await stream(sb);assert.deepEqual((await req('state',sb)).series.wins,[1,0]);
+ state=await req('nextRound',sa);assert.equal(state.duel.turn,first);now+=3001;await winA();assert.equal(state.outcome.kind,'series');assert.equal(state.series.complete,true);assert.deepEqual(state.series.wins,[2,0]);
+ assert.deepEqual((await req('state',sv)).outcome,state.outcome);assert.equal((await req('nextRound',sa)).status,400);
+ state=await req('replay',sa);assert.deepEqual(state.series.wins,[0,0]);assert.equal(state.series.round,1);now+=3001;
+ await req('leave',sb);state=await req('state',sa);assert.equal(state.outcome.kind,'forfeit');assert.equal(state.series.complete,true);const wins=[...state.series.wins];await req('state',sv);assert.deepEqual((await req('state',sa)).series.wins,wins);
+ await req('lobby',sa);state=await req('state',sa);assert.equal(state.series,null);assert.equal(state.outcome,null);assert.equal(state.phase,'lobby');assert.equal(state.seriesMode,'single');
+ // Expiring the reconnect grace period forfeits once, even between rounds.
+ const c=await req('join',{}, {name:'Series C',code:a.code}),sc={code:c.code,secret:c.secret};const cs=await stream(sc);await req('seriesFormat',sa,{mode:'best3'});state=await req('begin',sa,{ids:[a.me,c.me]});now+=3001;
+ const moves=state.duel.turn===0?[0,3,1,4,2]:[3,0,4,1,8,2];for(const index of moves)state=await req('move',state.duel.turn===0?sa:sc,{index});assert.equal(state.phase,'ended');assert.deepEqual(state.series.wins,[1,0]);
+ cs.abort();await sleep(30150);state=await req('state',sa);assert.equal(state.outcome.kind,'forfeit');assert.equal(state.series.complete,true);assert.deepEqual(state.series.wins,[1,0]);assert.equal((await req('state',sc)).status,401);
+ }finally{Date.now=realNow;controllers.forEach(c=>c.abort());server.closeAllConnections();await new Promise(r=>server.close(r));}
 });

@@ -1,32 +1,45 @@
 # Saba_Party
 
-Play at https://pals-party.onrender.com. Create a room, share its eight-character code and join with separate nicknames. The host chooses and starts each game. Rooms hold 2–8 people. Late joiners watch until the next match. Room chat is available throughout.
+Live: https://pals-party.onrender.com
+
+A private, phone-first room for 2–8 friends. A valid nickname enables Create or Join. Creating asks for a room name; joining asks for the eight-character invitation code. Rooms are unlisted. Each browser tab keeps its private reconnect token in sessionStorage; refreshing restores the same player within the 30-second reconnect grace period.
+
+## Four screens
+
+- **Welcome:** nickname and Create/Join only.
+- **Lobby:** room name/code, four game choices, relevant settings and one Start button. Only the host can configure and start.
+- **Match:** game, turn/status, compact scores and board/controls. Setup is hidden. Spectators are identified clearly.
+- **Results:** one shared announcement for every player and spectator. Distinguishes a win, shared win, draw, round win, series win, forfeit or cancellation. Open floating panels close when results arrive so the announcement is visible. Only the host controls the next action.
+
+Chat, Players and Help use top buttons and accessible floating dialogs. Chat retains its unread badge. Close dialogs with their close button, Escape or a backdrop click. Instructions live in Help, and the player list lives in Players. No public room directory or private messaging is added.
 
 ## Games
 
-- **Memory Match (2–8):** Take Turns is the default, with the original Race mode still available to the host. In Take Turns everyone sees the current player’s two flips; a pair earns 1 point and another turn. A mismatch remains visible for one second, then hides and passes play. The first player is random; turns follow join order. Disconnecting pauses the current turn for the 30-second reconnect window, then skips that player. Race mode retains the original private flips and first-valid-claim scoring. All 12 claimed ends either mode; equal top scores share the win.
-- **Tap Racing (2–8):** a shared three-second countdown starts a race to 100 steps. Tap the button or press Space, up to 10 steps per rolling second. Touch-down controls suppress selection and context menus, with visible press feedback. Persistent car elements animate smoothly between server-confirmed positions. Holding Space does not repeat. Finishers in the same 50 ms server window share first place. A 60-second deadline awards the win to the furthest players, including ties.
-- **Tic-Tac-Toe (2):** host selects two connected players; others spectate. Random initial starting player takes X; the starting player alternates on rematches. Three in a row wins, a full board without a line draws. Turns are enforced by the server.
-- **Gebeta (2):** seed illustrations sit inside recessed circular pits, with exact counts below each pit and legal moves highlighted. Sowing is synchronized for everyone: one seed every 200 ms, a highlighted destination, and a 500 ms pause when the handful runs out before relay pickup or final capture. Counts update at each landing; the next move is blocked server-side until sowing finishes. Refresh restores the current animation position. Approved family-of-four variant. Two rows of six pits, four seeds per pit. Pick a nonempty home pit and sow counterclockwise through both rows. A last seed in an empty pit ends the turn; in an occupied pit, pick up and relay sow. A last seed making four captures those four for the moving player and ends the turn. Families formed along the way belong to that pit's owner. If the next player starts with an empty row, the opponent collects all remaining seeds. Most captured seeds wins; equal totals, repeated board-and-turn positions or an endless relay cycle draw. This is the agreed variant, not a claim that all Ethiopian communities use identical rules.
+- **Memory Match (2–8):** Take Turns is the default. Everyone sees the current player's two flips; a pair earns one point and another turn. A mismatch hides after one second and passes play. The first player is random; turns follow join order. Race mode retains simultaneous private flips and first-valid-claim scoring. All 12 pairs claimed ends either mode; equal top scores share the win. Claimed pairs remain claimed if a player leaves. A disconnected current turn waits for the reconnect grace period before skipping that player.
+- **Tap Racing (2–8):** a three-second countdown starts a race to 100 steps. Tap the button or press Space, up to 10 steps per rolling second. Holding Space does not repeat. Touch controls suppress text selection and context menus; persistent car elements animate between server-confirmed positions. Finishers in the same 50 ms server window share first place. At the 60-second deadline, furthest players win, including ties.
+- **Tic-Tac-Toe (2):** the host selects two players and everyone else watches. The first starter is random, takes X, and starters alternate on rematches. Three in a row wins; a full board without a line draws.
+- **Gebeta (2):** the approved family-of-four variant uses two rows of six pits with four seeds each. Sow counterclockwise through both rows, relay from an occupied final pit, and stop at an empty final pit. A final seed making four captures that family for the mover; intermediate families belong to the pit owner. An empty row at the start of a turn ends the game and the opponent collects the rest. Most captured seeds wins. Equal totals, repeated board/turn positions or an endless relay draw. Sowing remains synchronized at one seed every 200 ms with 500 ms pauses after each handful; counts and landing highlights update along the way, and the next move is blocked until sowing finishes.
+
+## Optional Best of 3
+
+Available for Tic-Tac-Toe and Gebeta. Single round remains the default. Best of 3 means first to two round wins; draws give no wins and additional rounds may be needed. The same two competitors stay locked for the series, and the starting player alternates every round, including draws. Current round scores and series wins are displayed separately.
+
+The server settles each round once, and publishes the same result to everyone. Next round preserves series progress. Play again creates a fresh series with scores reset; Back to lobby clears series state and allows new settings/competitors. These actions are host-only. Between normal rounds, the host gets Next round. After completion, the host gets Play again and Back to lobby.
+
+A competitor explicitly leaving or exceeding the reconnect grace period forfeits an unfinished series, including between rounds. A forfeit ends the series without artificially adding round wins. Repeated disconnect processing never increments wins again. Refresh/reconnect preserves the competitor identity and series progress.
 
 ## Connections and privacy
 
-Room state uses authenticated POST server-sent event streams. Updates are sent after actual game or room events, not on a recurring state timer. Countdown completion, mismatch hiding, race deadline, finish adjudication and disconnect expiry use one-shot timers. Empty transport comments every 20 seconds keep the connection healthy; they contain no room state. Stream tokens are in the request body, not URL query strings. Each player receives only their own hidden card values. Chat stays within its room; anyone with the invitation code may join. This is not end-to-end encrypted chat.
+State uses authenticated POST server-sent events. Actual room/game events, one-shot deadlines and animation frames trigger updates; there is no recurring state polling. Transport keep-alive comments contain no room state. Tokens are sent in request bodies, not URL query strings. Hidden Memory faces are sent only to their owner in Race mode. Chat is delivered only to authenticated room members and rendered as plain text. Anyone with the room code may join; chat is not end-to-end encrypted.
 
-Refreshing restores the tab's private session token within 30 seconds. Open a fresh window by typing the address; duplicating tabs can copy sessionStorage. On disconnect, two-player games pause for 30 seconds and then forfeit; a reconnected player resumes their turn. Racing and Memory continue during the reconnect window. Departed players cannot win; claimed Memory pairs remain claimed. Fewer than two active competitors ends Racing or Memory without a winner. If the host disconnects, control moves to a connected player. The last player leaving closes the room.
+Two-player games pause during the reconnect window. Racing and Memory continue while a disconnected player has time to return. Fewer than two active competitors cancels Racing or Memory without a winner. Host control transfers to a connected player if the host disconnects. Empty rooms close.
 
-## Run and verify locally
+## Run and test
 
-Requires Node 22. Set PORT=4317 if desired, then run `npm start`. Open the displayed localhost port in two browser windows. Run `npm test` for rule and HTTP/push-stream integration checks.
+Requires Node 22. Run `npm start`, or set PORT to choose a local port. Open the URL in independent browser windows. Run `npm test` for game rules, HTTP/push streams, chat notifications, entry validation, authoritative results and Best-of-3 lifecycle tests. The suite includes a real 30-second reconnect-expiry check.
 
-Render runs one Free Node instance. Auto-deploy is off: publish updates manually between matches. Sleeping, restarting or redeploying clears rooms, chat and scores. Free services sleep after 15 idle minutes and can take about a minute to wake. See DEPLOY-RENDER.md for hosting instructions and limits.
+The light royal theme uses obsidian, warm crimson, parchment and gold, with restrained headings and phone-sized controls.
 
-## Visual theme
+## Hosting limitation
 
-Ancient royal court styling: imperial obsidian #120D1C, antique crimson #2B141D, parchment #FFF8E7 and gold #FFB800. Phone screens put the central game card first with stacked game choices below; all game rules, timing, scoring and connection logic are unchanged.
-
-The lobby places game selection, player selection and Start together before the board. During play the board takes priority and setup collapses. A short hint stays beside each board; full instructions expand under How to play. On phones Create/Join appears before the welcome copy.
-
-Chat opens from the sticky top-bar Chat button in a floating dialog. An unread badge counts new messages from other players while chat is closed; opening it clears the badge. Close with the close button, Escape, or outside the panel. Message IDs distinguish repeated identical messages. This adds no browser notification permissions and changes no game rules.
-
-Entry is nickname-first: valid nicknames enable Create and Join. Create reveals a 1–40-character room name; Join reveals the private eight-character invitation code. Room names are shown only to room members and do not create a public room listing. The lighter royal theme uses parchment forms and panels with a dark header. Lobby order is game selection, settings, Start, players, then instructions; during play the board stays first and setup collapses. Group chat remains available from the top button.
+Render runs one Free Node instance, with auto-deploy disabled. Publish updates between matches. Rooms, messages, scores and series progress live in memory and are lost on server restart, sleep or redeployment. Free services sleep after 15 idle minutes and may take about a minute to wake. See DEPLOY-RENDER.md for setup and limits.
