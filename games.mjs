@@ -9,7 +9,7 @@ export function sowGebeta(board,captured,side,pit){
  const result=loop=>({board:cells,captured:scores,loop,frames,duration:at});record('pickup');
  while(true){
   const signature=JSON.stringify([cells,scores,cursor,seeds]);if(visited.has(signature)){at+=500;record('rest');return result(true);}visited.add(signature);
-  while(seeds>0){cursor=(cursor+11)%12;cells[cursor]++;seeds--;at+=200;record('land');
+  while(seeds>0){cursor=(cursor+1)%12;cells[cursor]++;seeds--;at+=200;record('land');
    if(cells[cursor]===4){const owner=seeds===0?side:(cursor<6?0:1);if(seeds===0)at+=500;scores[owner]+=4;cells[cursor]=0;record('capture');if(seeds===0)return result(false);}
   }
   at+=500;
