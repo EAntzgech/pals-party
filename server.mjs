@@ -89,7 +89,7 @@ return res.setHeader('Content-Type','application/json').end(JSON.stringify({secr
 r=rooms.get(b.code);p=r?.players.find(x=>x.secret===b.secret&&!x.left);if(!p)fail('Session expired. Please join again.',401);clean(r);if(p.left)fail('Reconnect window expired. Please join again.',401);p.seen=Date.now();
 if(req.url==='/events'){
  clearTimeout(p.expiry);const old=p.stream;p.stream=res;p.disconnected=false;if(old)old.end();
- res.writeHead(200,{'Content-Type':'text/event-stream','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(': connected\n\n');
+ res.writeHead(200,{'Content-Type':'text/event-stream','Connection':'keep-alive','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'});res.socket?.setNoDelay(true);res.flushHeaders();res.write(': connected\n\n');
  clean(r);publish(r);const keepAlive=setInterval(()=>res.write(': keep-alive\n\n'),20000);keepAlive.unref();
  res.on('close',()=>{clearInterval(keepAlive);disconnect(r,p,res);});return;
 }
@@ -97,8 +97,8 @@ if(p.flips.length===2&&Date.now()>=p.lock)p.flips=[];
 if(b.action==='chat'){const message=String(b.message||'').trim();if(!message||message.length>240)fail('Use 1–240 characters.');if(Date.now()-(p.lastChat||0)<700)fail('Please wait a moment.');p.lastChat=Date.now();r.chat.push({id:token(),name:p.name,text:message});r.chat=r.chat.slice(-80);}
 else if(b.action==='endGame'){
  if(r.host!==p.id)fail('Only the host can end the game.',403);if(r.phase!=='playing'&&!(r.series&&!r.series.complete))fail('There is no active game to end.');
- r.phase='lobby';r.series=null;r.seriesOffer=null;r.outcome=null;r.seriesMode='single';r.duel=null;r.result='';r.start=0;r.endsAt=null;r.shared=[];r.turnLock=0;
- r.roomNotice={id:token(),text:'The host ended the game. No winner was awarded.'};
+ r.phase='lobby';r.series=null;r.seriesOffer=null;r.outcome=null;r.seriesMode='single';r.duel=null;r.result='';r.start=0;r.endsAt=null;r.shared=[];r.turnLock=0;r.turnOrder=[];r.turnPlayer=null;r.turnPaused=false;
+ r.roomNotice={id:token(),text:'Match ended. Everyone stays in the room. Choose a game or start again when ready.'};
  for(const x of r.players){x.active=false;x.score=0;x.flips=[];x.lock=0;}
 }
 else if(b.action==='offerSeries'){

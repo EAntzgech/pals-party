@@ -15,12 +15,14 @@ if(invitedCode&&/^[A-HJ-NP-Z2-9]{8}$/i.test(invitedCode)){
 }else if(invitedCode){$('joinFields').hidden=false;$('joinError').hidden=false;$('joinError').textContent='This invitation has an invalid room code. Ask your friend for a new link.';}
 $('roomcode').addEventListener('input',()=>{if($('roomcode').value.length>=8&&!validCode()){$('joinError').hidden=false;$('joinError').textContent='Use eight letters or numbers. Codes do not use I, O, 0, or 1.';$('roomcode').setAttribute('aria-invalid','true');}});
 function roomInvitation(code){const url=new URL(location.pathname,location.origin);url.searchParams.set('room',code);return url.href;}
+function inviteMessage(code){return 'Join me in Saba_Party!\nRoom code: '+code+'\nOpen this link: '+roomInvitation(code);}
 async function copyRoomText(text,label){
  try{if(!navigator.clipboard?.writeText)throw Error('Unavailable');await navigator.clipboard.writeText(text);$('shareStatus').textContent=label+' copied.';$('copyFallback').hidden=true;}
  catch{$('copyFallback').value=text;$('copyFallback').hidden=false;$('copyFallback').focus();$('copyFallback').select();$('shareStatus').textContent='Select and copy the '+label.toLowerCase()+' above.';}
 }
 $('copyCode').onclick=()=>state&&copyRoomText(state.code,'Room code');
-$('shareInvite').onclick=async()=>{if(!state)return;const url=roomInvitation(state.code);if(navigator.share){try{await navigator.share({title:'Play Saba_Party',text:'Join my private game room.',url});$('shareStatus').textContent='Invitation shared.';return;}catch(e){if(e.name==='AbortError')return;}}await copyRoomText(url,'Invitation link');};
+$('shareInvite').onclick=async()=>{if(!state)return;const text=inviteMessage(state.code);if(navigator.share){try{await navigator.share({title:'Play Saba_Party',text});$('shareStatus').textContent='Invitation shared with room code and link.';return;}catch(e){if(e.name==='AbortError')return;}}await copyRoomText(text,'Invite message');};
+$('copyInvite').onclick=()=>state&&copyRoomText(inviteMessage(state.code),'Invite message');
 const connectionHelp=element('p','','connectionHelp');connectionHelp.id='connectionHelp';connectionHelp.hidden=true;connectionHelp.setAttribute('role','status');$('connection').after(connectionHelp);$('connection').setAttribute('role','status');$('connection').setAttribute('aria-live','polite');
 const updateConnectionHelp=()=>{const text=$('connection').textContent,waiting=/reconnect|connecting/i.test(text);connectionHelp.hidden=!waiting;connectionHelp.textContent=/reconnect/i.test(text)?'Your place is held for up to 30 seconds after disconnecting. Two-player games pause while we reconnect.':'Connecting to the room. A sleeping server may take longer to respond.';};
 new MutationObserver(updateConnectionHelp).observe($('connection'),{childList:true,characterData:true,subtree:true});
