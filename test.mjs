@@ -9,9 +9,9 @@ test('new game rules: wins, draws, captures, relay sowing and conservation',()=>
  assert.equal(ticResult(['X','X','X',null,'O',null,'O',null,null]),'X');
  assert.equal(ticResult(['X','O','X','X','O','O','O','X','X']),'draw');
  assert.equal(ticResult(Array(9).fill(null)),null);
- const terminal=sowGebeta([1,8,4,4,4,4,4,4,4,4,4,3],[0,0],0,0);assert.equal(terminal.captured[0],4);assert.equal(terminal.board[11],0);
- const ownership=sowGebeta([2,0,0,0,0,0,0,0,0,0,0,3],[0,0],0,0);assert.equal(ownership.captured[1],4);assert.equal(ownership.board[10],1);
- const empty=sowGebeta([1,0,0,0,0,0,0,0,0,0,0,0],[0,0],0,0);assert.equal(empty.board[11],1);
+ const terminal=sowGebeta([1,3,0,0,0,0,0,0,0,0,0,0],[0,0],0,0);assert.equal(terminal.captured[0],4);assert.equal(terminal.board[1],0);
+ const ownership=sowGebeta([0,0,0,0,0,2,3,0,0,0,0,0],[0,0],0,5);assert.equal(ownership.captured[1],4);assert.equal(ownership.board[7],1);
+ const empty=sowGebeta([1,0,0,0,0,0,0,0,0,0,0,0],[0,0],0,0);assert.equal(empty.board[1],1);
  assert.equal(empty.frames[0].kind,'pickup');assert.equal(empty.frames[1].at,200);assert.equal(empty.duration,700);
  assert.equal(terminal.frames.at(-1).kind,'capture');assert.equal(terminal.frames.at(-1).at-terminal.frames.at(-2).at,500);
  const relay=sowGebeta(Array(12).fill(4),[0,0],0,0);for(let i=1;i<relay.frames.length;i++){const f=relay.frames[i],previous=relay.frames[i-1];if(f.kind==='land')assert.equal(f.at-previous.at,200);if(f.kind==='pickup')assert.equal(f.at-previous.at,500);assert.equal(f.cells.reduce((a,b)=>a+b,0)+f.captured.reduce((a,b)=>a+b,0)+f.hand,48);}
