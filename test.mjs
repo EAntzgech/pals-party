@@ -9,9 +9,9 @@ test('new game rules: wins, draws, captures, relay sowing and conservation',()=>
  assert.equal(ticResult(['X','X','X',null,'O',null,'O',null,null]),'X');
  assert.equal(ticResult(['X','O','X','X','O','O','O','X','X']),'draw');
  assert.equal(ticResult(Array(9).fill(null)),null);
- const terminal=sowGebeta([1,3,0,0,0,0,0,0,0,0,0,0],[0,0],0,0);assert.equal(terminal.captured[0],4);assert.equal(terminal.board[1],0);
- const ownership=sowGebeta([0,0,0,0,0,2,3,0,0,0,0,0],[0,0],0,5);assert.equal(ownership.captured[1],4);assert.equal(ownership.board[7],1);
- const empty=sowGebeta([1,0,0,0,0,0,0,0,0,0,0,0],[0,0],0,0);assert.equal(empty.board[1],1);
+ const terminal=sowGebeta([1,8,4,4,4,4,4,4,4,4,4,3],[0,0],0,0);assert.equal(terminal.captured[0],4);assert.equal(terminal.board[11],0);
+ const ownership=sowGebeta([2,0,0,0,0,0,0,0,0,0,0,3],[0,0],0,0);assert.equal(ownership.captured[1],4);assert.equal(ownership.board[10],1);
+ const empty=sowGebeta([1,0,0,0,0,0,0,0,0,0,0,0],[0,0],0,0);assert.equal(empty.board[11],1);
  assert.equal(empty.frames[0].kind,'pickup');assert.equal(empty.frames[1].at,200);assert.equal(empty.duration,700);
  assert.equal(terminal.frames.at(-1).kind,'capture');assert.equal(terminal.frames.at(-1).at-terminal.frames.at(-2).at,500);
  const relay=sowGebeta(Array(12).fill(4),[0,0],0,0);for(let i=1;i<relay.frames.length;i++){const f=relay.frames[i],previous=relay.frames[i-1];if(f.kind==='land')assert.equal(f.at-previous.at,200);if(f.kind==='pickup')assert.equal(f.at-previous.at,500);assert.equal(f.cells.reduce((a,b)=>a+b,0)+f.captured.reduce((a,b)=>a+b,0)+f.hand,48);}
@@ -76,7 +76,7 @@ test('HTTP + private push streams across all four games',async()=>{
  await request('select',sa,{game:'gebeta'});s=await request('begin',sa,{ids:[a.me,d.me]});now+=3001;const gs=[sa,sd];assert.equal((await request('move',gs[s.duel.turn],{index:(1-s.duel.turn)*6})).status,400);
  const side=s.duel.turn,pit=side*6;const expected=sowGebeta(s.duel.cells,s.duel.captured,side,pit);s=await request('move',gs[side],{index:pit});assert.equal(s.status,200);assert.equal(s.duel.animation.hand,4);assert.equal(s.duel.cells[pit],0);
  assert.equal((await request('move',gs[side],{index:pit+1})).status,400);assert.equal((await request('move',gs[1-side],{index:(1-side)*6})).status,400);
- await sleep(250);s=await request('state',sa);assert.equal(s.duel.animation.kind,'land');assert.equal(s.duel.animation.hand,3);assert.equal(s.duel.cells[(pit+1)%12],5);
+ await sleep(250);s=await request('state',sa);assert.equal(s.duel.animation.kind,'land');assert.equal(s.duel.animation.hand,3);assert.equal(s.duel.cells[(pit+11)%12],5);
  // A refreshed/reconnected player receives the actual intermediate position.
  await stream(sd);s=await request('state',sd);assert.ok(s.duel.animation);assert.equal(s.duel.cells.reduce((a,b)=>a+b,0)+s.duel.captured.reduce((a,b)=>a+b,0)+s.duel.animation.hand,48);
  await sleep(expected.duration-200+100);s=await request('state',sa);assert.equal(s.duel.animation,null);assert.deepEqual(s.duel.cells,expected.board);assert.deepEqual(s.duel.captured,expected.captured);assert.equal(s.duel.turn,1-side);
@@ -196,3 +196,5 @@ test('host cancellation and loser-requested Best of 3 require the right permissi
  await req('select',sa,{game:'ttt'});state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;await winA();await req('offerSeries',sb);const finalResult=structuredClone(state.outcome);await req('leave',sa);state=await req('state',sv);assert.equal(state.seriesOffer.status,'closed');assert.equal(state.series,null);assert.deepEqual(state.outcome,finalResult);
  }finally{Date.now=realNow;controllers.forEach(c=>c.abort());server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
+
+

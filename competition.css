@@ -49,6 +49,7 @@ button:active:enabled{transform:translateY(2px);box-shadow:0 1px 0 #70490c}
 @media(prefers-reduced-motion:reduce){button{transition:none!important}button:hover:enabled,button:active:enabled{transform:none}}
 
 .entryChoices[hidden]{display:none!important}
+
 .tutorialStepHeading{font-size:20px;line-height:1.25;margin:0 0 5px;color:#442922}.tutorialArt{display:grid;place-items:center;min-height:102px;margin:10px 0 12px;padding:8px 14px;border:1px solid #d3b88d;border-radius:14px;background:#f4e5ca;color:#60392e}.tutorialArt svg{display:block;width:min(100%,480px);height:auto;max-height:138px;overflow:visible}.tutorialNav{display:flex;gap:10px;margin:8px 0}.tutorialNav button{flex:1;min-height:48px}.demoStatus{min-height:0}.demoPanel .demoBoard{margin-top:8px}.demoPanel .demoPits{max-width:530px;margin:auto}@media(max-width:480px){.tutorialStepHeading{font-size:19px}.tutorialArt{min-height:92px;margin:8px 0 10px;padding:6px}.tutorialArt svg{max-height:112px}.tutorialNav{position:sticky;bottom:-16px;padding:8px 0;background:#fff8e7}}
 /* Gebeta: one carved board with the active player's whole row outlined. */
 .gebetaBoard{display:flex;flex-direction:column;gap:0;width:100%;max-width:760px;margin:24px auto;padding:5px;border:4px solid #5f3b30;border-radius:64px;background:#ecd8b5;box-shadow:inset 0 2px 0 #fff0d6,0 4px 0 #2b1819;overflow:hidden}
@@ -63,3 +64,20 @@ button:active:enabled{transform:translateY(2px);box-shadow:0 1px 0 #70490c}
 .gebetaBoard .pitCount{margin-top:3px;color:#4e3029;font-size:14px;font-weight:700;line-height:1.2}
 .gebetaBoard .seed{width:21%;height:18%;background:radial-gradient(circle at 32% 27%,#fff3cb 0 12%,#e7bd70 45%,#bb8040 100%);border:1px solid #99673c;box-shadow:0 1px 2px #3c241566}
 @media(max-width:480px){.gebetaBoard{margin:18px auto;padding:3px;border-width:3px;border-radius:42px}.gebetaRow{gap:2px;padding:5px 3px;border-radius:22px}.gebetaRow+.gebetaRow{border-radius:0 0 22px 22px}.gebetaRow.isTurn{border-radius:20px}.gebetaBoard .pitWrap .pit{border-width:2px}.gebetaBoard .pitCount{font-size:13px;margin-top:2px}}
+
+/* Gebeta turn emphasis and motion-led rule slides. */
+.gebetaRow::before{content:attr(data-label);grid-column:1/-1;text-align:left;padding:0 4px 2px;color:#56382e;font-size:13px;font-weight:700;line-height:1.25}
+.gebetaRow.isTurn{border:3px solid #b83232;border-radius:30px;background:#efc1b8;box-shadow:inset 0 0 0 1px #fff2e8;z-index:1}
+.tutorialControls{display:flex;justify-content:flex-end;margin:8px 0}
+.tutorialControls button{min-height:44px;padding:8px 14px;font-size:13px;box-shadow:none}
+.tutorialArt[data-lesson=opening].isPlaying svg>g{animation:tutorialDraw 1.4s ease both}
+.tutorialArt[data-lesson=pickup].isPlaying svg g:last-child circle{animation:seedLift 1.1s ease-in-out infinite alternate}
+.tutorialArt[data-lesson=relay].isPlaying svg path{stroke-dasharray:400;animation:sowPath 1.5s linear infinite}
+.tutorialArt[data-lesson=capture].isPlaying svg g:last-child circle:nth-child(-n+4){animation:seedCapture 1.2s ease-in-out infinite alternate}
+.tutorialArt[data-lesson=finish].isPlaying svg path{stroke-dasharray:400;animation:sowPath 1.7s linear infinite}
+@keyframes tutorialDraw{from{stroke-dasharray:1 800;opacity:.3}to{stroke-dasharray:800 0;opacity:1}}
+@keyframes seedLift{to{transform:translate(180px,-35px);opacity:.5}}
+@keyframes seedCapture{to{transform:translate(210px,0);opacity:.35}}
+@keyframes sowPath{from{stroke-dashoffset:400}to{stroke-dashoffset:0}}
+@media(max-width:480px){.gebetaRow::before{font-size:11px}}
+
