@@ -176,7 +176,7 @@ test('host cancellation and loser-requested Best of 3 require the right permissi
  const b=await req('join',{}, {code:a.code,name:'B'}),sb={code:b.code,secret:b.secret};await stream(sb);
  const v=await req('join',{}, {code:a.code,name:'Observer'}),sv={code:v.code,secret:v.secret};await stream(sv);
  await req('chat',sa,{message:'Chat stays open'});await req('start',sa);now+=3001;
- assert.equal((await req('endGame',sb)).status,403);let state=await req('endGame',sa);assert.equal(state.phase,'lobby');assert.equal(state.outcome,null);assert.equal(state.series,null);assert.match(state.roomNotice.text,/host ended/);assert.equal(state.chat[0].text,'Chat stays open');assert.equal(state.players.length,3);
+ assert.equal((await req('endGame',sb)).status,403);let state=await req('endGame',sa);assert.equal(state.phase,'lobby');assert.equal(state.outcome,null);assert.equal(state.series,null);assert.match(state.roomNotice.text,/everyone stays in the room/i);assert.equal(state.chat[0].text,'Chat stays open');assert.equal(state.players.length,3);
  assert.deepEqual((await req('state',sv)).roomNotice,state.roomNotice);assert.equal((await req('endGame',sa)).status,400);
  async function winA(){const moves=state.duel.turn===0?[0,3,1,4,2]:[3,0,4,1,8,2];for(const index of moves)state=await req('move',state.duel.turn===0?sa:sb,{index});}
  await req('select',sa,{game:'ttt'});state=await req('begin',sa,{ids:[a.me,b.me]});now+=3001;const first=state.duel.turn;await winA();const initial=structuredClone(state.outcome);

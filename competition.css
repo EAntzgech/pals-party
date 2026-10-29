@@ -13,3 +13,39 @@ button:not(.pit){min-height:44px!important}.matchPlayers{margin:8px 0}.matchPlay
 
 .hero>.entry:first-child{display:block;padding:26px 22px}.hero .welcomeIntro h1{margin:0 0 12px}.hero .welcomeIntro p{margin:0 0 18px}@media(max-width:480px){.hero>.entry:first-child{padding:20px 16px}}
 
+
+/* Soft, tactile depth with simple surfaces and clear actions. */
+button{transform:translateY(0);transition:transform .14s ease,box-shadow .14s ease,background-color .14s ease}
+button:hover:enabled{transform:translateY(-1px)}
+button:active:enabled{transform:translateY(2px);box-shadow:0 1px 0 #70490c}
+.hero .entry{background:linear-gradient(150deg,#fffaf0,#f1e3cf);color:#2b141d;border:1px solid #d6b982;box-shadow:0 5px 0 #c5aa82,0 15px 30px #120d1c26,inset 0 1px 0 #fff}
+.hero .entry label,.hero .entry .small,.hero .entry .welcomeIntro p{color:#5e463b}
+.hero .entry input{background:linear-gradient(#fffdf8,#f7efdf);color:#2b141d;border-color:#c6a776;box-shadow:inset 0 2px 4px #49322012}
+.hero .entry input::placeholder{color:#8c796a}
+.entryChoices{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+.entryChoices button{min-height:58px!important;border-radius:14px!important;padding:12px 10px!important;white-space:normal!important;line-height:1.25;font-size:15px!important;box-shadow:0 5px 0 #a76c0c,inset 0 1px 0 #fff4c5!important}
+.entryChoices #join{background:linear-gradient(150deg,#fff9ed,#ebdac0);border-color:#c29a5f;color:#46291c;box-shadow:0 5px 0 #b99b72,inset 0 1px 0 #fff!important}
+.entryChoices button[aria-pressed=true]{outline:2px solid #714322;outline-offset:2px}
+.entryChoices button:disabled{opacity:.48}
+#confirmCreate,#confirmJoin,#confirmInvite{width:100%;min-height:52px;border-radius:12px;box-shadow:0 4px 0 #a76c0c,inset 0 1px 0 #fff5c9}
+#invitePanel{display:grid;gap:9px;padding:14px;border:1px solid #d0b27f;border-radius:14px;background:linear-gradient(145deg,#fff8e8,#f0e0c6);box-shadow:inset 0 1px 0 #fff}
+#invitePanel[hidden]{display:none}
+#inviteRoomLabel{margin:0;color:#432b20;font-size:17px;font-weight:700;line-height:1.4}
+#inviteError{margin:0}
+#manualInviteCode{min-height:44px}
+.gebetaLearning{display:grid;gap:2px}
+.entryChoices button:focus-visible,#confirmCreate:focus-visible,#confirmJoin:focus-visible,#confirmInvite:focus-visible{outline-color:#75421e}
+.tutorialProgress{margin:0;color:#7c4b23;font-weight:700;font-size:13px;letter-spacing:.04em}
+.tutorialNav{display:flex;gap:10px;margin:8px 0}
+.tutorialNav[hidden]{display:none}
+.tutorialNav button{flex:1;min-height:48px}
+.demoActions button{min-height:46px}
+.demoPit{box-shadow:inset 0 5px 10px #120d1c99,inset 0 -2px 3px #d9a75c35,0 3px 0 #39211d}
+.demoPit .seed{background:radial-gradient(circle at 32% 27%,#fff2c9 0 12%,#f4d88f 40%,#c69b55 100%);border:1px solid #b38a4c;box-shadow:0 2px 2px #21120d88,inset 0 1px 1px #fff8d2}
+.entry .signatureIntro{color:#412a21}
+.entry .signatureIntro .eyebrow{color:#7a4835}
+.gebetaLearning button{text-align:left}
+@media(max-width:480px){.entryChoices{grid-template-columns:1fr}.entryChoices button{min-height:54px!important}.hero .entry{box-shadow:0 4px 0 #c5aa82,0 10px 22px #120d1c20,inset 0 1px 0 #fff}.tutorialNav{position:sticky;bottom:-16px;padding:8px 0;background:#fff8e7}}
+@media(prefers-reduced-motion:reduce){button{transition:none!important}button:hover:enabled,button:active:enabled{transform:none}}
+
+.entryChoices[hidden]{display:none!important}
